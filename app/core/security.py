@@ -13,14 +13,31 @@ settings = get_settings()
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+BCRYPT_MAX_PASSWORD_BYTES = 72
+
+
+def _ensure_password_within_limit(password: str) -> None:
+    """Raise clear error if password exceeds bcrypt byte limit."""
+    if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(
+            f"Password must be at most {BCRYPT_MAX_PASSWORD_BYTES} bytes when encoded "
+            "as UTF-8; truncate (e.g. password[:72]) or choose a shorter value."
+        )
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a plain password against a hashed password."""
+    try:
+        _ensure_password_within_limit(plain_password)
+    except ValueError:
+        # Password is too long to be valid for bcrypt
+        return False
     return pwd_context.verify(plain_password, hashed_password)
 
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt."""
+    _ensure_password_within_limit(password)
     return pwd_context.hash(password)
 
 
