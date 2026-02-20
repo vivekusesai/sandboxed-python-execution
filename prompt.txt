@@ -1,0 +1,261 @@
+ROLE
+You are a senior Python platform engineer building a fully local Windows-native data transformation platform.
+
+The system must run on:
+* Windows 10/11
+* Windows Server
+* No Docker
+* No containers
+* No cloud services
+* No external APIs after installation
+
+🚫 HARD CONSTRAINTS
+❌ Do NOT Use
+* Docker
+* WSL (do not assume it exists)
+* Kubernetes
+* Cloud auth providers
+* Any hosted services
+* Linux-only sandbox tools (seccomp, cgroups, namespaces)
+
+✅ Must Use
+* Native Python
+* Local PostgreSQL
+* Windows process isolation
+* Restricted Python execution
+* psutil monitoring
+* Windows-compatible subprocess sandboxing
+
+🧱 Technology Stack
+* Backend
+- FastAPI (async)
+
+* Database
+- Local PostgreSQL Windows installation
+
+* ORM
+- SQLAlchemy Async
+
+Background Jobs
+* Preferred:
+- RQ + Redis (Windows service install)
+
+* Fallback:
+- Python multiprocessing worker
+
+🎯 Core Application Features
+Users can:
+* View Postgres tables
+* Preview data
+* Write Python transformation scripts
+* Execute scripts safely
+* Save transformed data to new tables
+* View job history and logs
+
+🖥 Windows Execution Architecture
+FastAPI Server
+    ↓
+Local Worker Process
+    ↓
+Sandbox Subprocess (Restricted Execution)
+    ↓
+PostgreSQL
+
+🔐 Authentication
+Local-only:
+* JWT tokens
+* Local signing key in .env
+* bcrypt password hashing
+* Stored in PostgreSQL
+
+🧪 User Code Model
+User writes:
+def transform(df):
+    df["total"] = df["price"] * df["qty"]
+    return df
+
+System must:
+* Pull table → Pandas DataFrame
+* Execute transform() in sandbox process
+* Validate output
+* Write to destination table
+
+🔒 WINDOWS SANDBOX STRATEGY (CRITICAL)
+Windows cannot provide perfect isolation like Linux containers.
+
+Implement defense in depth:
+Layer 1 — RestrictedPython
+Must:
+* Disable unsafe builtins
+* Restrict attribute access
+* Restrict globals
+* Remove exec/eval
+* Prevent dynamic imports
+
+Layer 2 — Controlled Subprocess Execution
+Run user code using:
+subprocess.Popen(
+    ["python", "sandbox_runner.py"],
+    creationflags=CREATE_NO_WINDOW
+)
+
+Must:
+* Pass code via temp memory or pipe (not file if possible)
+* Use restricted environment variables
+* Use isolated working directory
+
+Layer 3 — Import Allow List
+Only allow:
+* pandas
+* numpy
+* datetime
+* math
+
+Must explicitly block:
+* os
+* sys
+* subprocess
+* socket
+* shutil
+* pathlib (write ops)
+* threading
+* multiprocessing
+* ctypes
+
+Layer 4 — Runtime Monitoring (psutil)
+Worker must monitor sandbox process:
+Track:
+* CPU %
+* Memory usage
+* Runtime duration
+
+Kill process if:
+* 60 seconds runtime
+* memory threshold
+* CPU runaway
+
+Layer 5 — File System Controls
+Sandbox working directory must be:
+project/sandbox_temp/<job_id>/
+
+Delete after execution.
+
+🗄 Database Schema
+users
+- id
+- email
+- password_hash
+- role
+- created_at
+
+scripts
+- id
+- user_id
+- name
+- code_text
+- created_at
+
+jobs
+- id
+- user_id
+- script_id
+- source_table
+- destination_table
+- status
+- logs
+- started_at
+- completed_at
+
+⚙️ Job Execution Flow
+* API receives run request
+* Job stored in DB
+* Job pushed to worker queue
+* Worker:
+- Pull Postgres data
+- Launch sandbox subprocess
+- Monitor process
+- Capture stdout/stderr
+- Validate DataFrame output
+- Write results
+- Update job record
+
+📊 Logging
+Must implement:
+File Logs
+logs/app.log
+logs/worker.log
+logs/sandbox.log
+Use rotating file handler.
+
+Database Logs
+Store execution logs in jobs.logs column.
+
+📦 Required Python Libraries
+* fastapi
+* uvicorn
+* sqlalchemy[asyncio]
+* asyncpg
+* alembic
+* pydantic
+* python-jose
+* passlib[bcrypt]
+* pandas
+* numpy
+* RestrictedPython
+* psutil
+* rq (optional)
+* redis (optional)
+
+📈 Performance Targets
+Must support:
+* 10–15 concurrent users
+* Tables up to ~2M rows
+* Chunk processing required
+
+🛡 Validation Rules
+Before writing destination table:
+* Validate table names safe (regex whitelist)
+* Limit output rows
+* Ensure DataFrame not empty
+* Validate schema compatibility
+
+🧪 Testing Requirements
+Must include:
+* Sandbox escape tests
+* Worker execution tests
+* API tests
+* Auth tests
+
+📁 Deliverables
+Generate:
+✅ Full source code
+✅ Windows setup instructions
+✅ Postgres setup guide
+✅ Worker startup scripts
+✅ Sandbox executor module
+✅ Example transformation scripts
+✅ Seed database script
+✅ README for offline setup
+
+🚀 Build Order
+* FastAPI skeleton
+* Postgres models
+* Auth system
+* Table explorer APIs
+* Job system
+* Worker
+* Sandbox subprocess execution
+* psutil monitoring
+* Logging
+
+📖 README Must Include
+* Python virtualenv setup (Windows)
+* PostgreSQL Windows install + config
+* Redis Windows setup (optional)
+* How to run API server
+* How to run worker
+* Sandbox limitations on Windows
+
+💡 Security Note (Must Document)
+State clearly:
+This sandbox provides strong application-level isolation but is not equivalent to VM or container isolation. It is suitable for trusted internal enterprise environments.
